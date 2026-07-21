@@ -1,1 +1,5 @@
 build_env/
+test.py
+A-Plus-Interview.spec
+build/
+dist/
