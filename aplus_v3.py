@@ -4,9 +4,10 @@ import pyautogui
 import numpy as np
 import keyboard 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QPoint, QTimer
-# Đã thêm QScrollArea vào dòng import bên dưới
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QLabel, QSizeGrip, QInputDialog, QScrollArea
-from PyQt6.QtGui import QIcon
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QWidget, 
+                             QLabel, QSizeGrip, QScrollArea, QDialog, QTextEdit, 
+                             QSlider, QPushButton, QHBoxLayout)
+from PyQt6.QtGui import QIcon, QColor
 
 from openai import OpenAI 
 
@@ -14,15 +15,12 @@ ROUTER_API_KEY = "sk-nry-gc2N_aerOiP1dW_sH7AxB2ynHWRAPATU7qFttTotkH8"
 ROUTER_BASE_URL = "https://router.bynara.id/v1"  
 ROUTER_MODEL_NAME = "mistral-medium-3-5" 
 
-# 1. THÊM LUỒNG NẠP MÔ HÌNH NHẬN DIỆN CHỮ NGẦM
 class OCRInitWorker(QThread):
     init_finished = pyqtSignal(object)
     
     def run(self):
         import easyocr
-        # Nạp model OCR vào bộ nhớ
         reader = easyocr.Reader(['vi', 'en'], gpu=False)
-        # Gửi model đã nạp xong ra ngoài
         self.init_finished.emit(reader)
 
 class AIInterviewWorker(QThread):
@@ -55,7 +53,6 @@ class AIInterviewWorker(QThread):
                 if full_text != self.last_text and len(full_text) > 10:
                     self.last_text = full_text
                     
-                    # Ghép vai trò với nội dung màn hình
                     prompt = f"""
                     {self.system_role}
 
@@ -65,14 +62,11 @@ class AIInterviewWorker(QThread):
                     
                     response_stream = self.client.chat.completions.create(
                         model=ROUTER_MODEL_NAME,  
-                        messages=[
-                            {"role": "user", "content": prompt}
-                        ],
+                        messages=[{"role": "user", "content": prompt}],
                         stream=True
                     )
                     
                     accumulated_response = ""
-                    
                     for chunk in response_stream:
                         if chunk.choices and len(chunk.choices) > 0:
                             delta = chunk.choices[0].delta
@@ -84,11 +78,48 @@ class AIInterviewWorker(QThread):
                     self.ai_response_ready.emit("Không tìm thấy câu hỏi mới hoặc nội dung quá ngắn.")
                         
         except Exception as e:
-            print(f"Lỗi hệ thống: {e}")
             self.ai_response_ready.emit(f"Lỗi xử lý: {e}")
 
+class SetupDialog(QDialog):
+    def __init__(self, default_role):
+        super().__init__()
+        self.setWindowTitle("Thiết lập hệ thống")
+        self.resize(400, 300)
+        
+        layout = QVBoxLayout(self)
+        
+        layout.addWidget(QLabel("Vai trò AI:"))
+        self.role_input = QTextEdit(default_role)
+        layout.addWidget(self.role_input)
+        
+        layout.addWidget(QLabel("Kéo thanh trượt để chọn màu giao diện:"))
+        self.color_slider = QSlider(Qt.Orientation.Horizontal)
+        self.color_slider.setRange(0, 359)
+        self.color_slider.setValue(120) 
+        self.color_slider.valueChanged.connect(self.update_color)
+        layout.addWidget(self.color_slider)
+        
+        self.preview = QLabel("Màu hiển thị")
+        self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.preview)
+        
+        btn_layout = QHBoxLayout()
+        self.btn_ok = QPushButton("OK")
+        self.btn_cancel = QPushButton("Cancel")
+        self.btn_ok.clicked.connect(self.accept)
+        self.btn_cancel.clicked.connect(self.reject)
+        btn_layout.addWidget(self.btn_ok)
+        btn_layout.addWidget(self.btn_cancel)
+        layout.addLayout(btn_layout)
+        
+        self.update_color(120)
+        
+    def update_color(self, hue):
+        self.color_hex = QColor.fromHsv(hue, 255, 255).name()
+        self.preview.setStyleSheet(f"background: rgba(0,0,0,120); color: {self.color_hex}; border: 2px solid {self.color_hex}; border-radius: 5px; padding: 5px; font-weight: bold;")
+
 class CreditScreen(QWidget):
-    def __init__(self):
+    def __init__(self, color_hex):
         super().__init__()
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -98,13 +129,13 @@ class CreditScreen(QWidget):
         
         self.label = QLabel("Dev by mizhai", self)
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.label.setStyleSheet("""
-            color: #39FF14;
+        self.label.setStyleSheet(f"""
+            color: {color_hex};
             font-size: 32px;
             font-weight: bold;
             font-family: Arial;
             background-color: rgba(0, 0, 0, 120);
-            border: 2px solid #39FF14;
+            border: 2px solid {color_hex};
             border-radius: 15px;
         """)
         layout.addWidget(self.label)
@@ -119,7 +150,7 @@ class CreditScreen(QWidget):
 class InterviewOverlay(QMainWindow):
     hotkey_triggered = pyqtSignal()
 
-    def __init__(self, system_role):
+    def __init__(self, system_role, color_hex):
         super().__init__()
         
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
@@ -136,65 +167,60 @@ class InterviewOverlay(QMainWindow):
         layout = QVBoxLayout(control_widget)
         layout.setContentsMargins(10, 10, 10, 10)
 
-        # THÊM: Tạo QScrollArea để hỗ trợ cuộn
         self.scroll_area = QScrollArea(self)
         self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setStyleSheet("""
-            QScrollArea {
+        # Đã xóa các dòng ẩn thanh cuộn ở đây
+        self.scroll_area.setStyleSheet(f"""
+            QScrollArea {{
                 background: transparent;
                 border: none;
-            }
-            QScrollBar:vertical {
+            }}
+            QScrollBar:vertical {{
                 border: none;
                 background: rgba(0, 0, 0, 150);
                 width: 10px;
                 border-radius: 4px;
-            }
-            QScrollBar::handle:vertical {
-                background: #39FF14;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {color_hex};
                 border-radius: 4px;
                 min-height: 20px;
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 height: 0px;
-            }
-            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+            }}
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
                 background: none;
-            }
+            }}
         """)
 
-        # 2. HIỂN THỊ THÔNG BÁO ĐANG NẠP KHI VỪA MỞ APP
         self.label = QLabel("Đang nạp mô hình AI nhận diện chữ (Khoảng 2-5 giây)...\nVui lòng chờ trong giây lát.", self)
-        self.label.setStyleSheet("""
-            color: #39FF14;
+        self.label.setStyleSheet(f"""
+            color: {color_hex};
             font-size: 15px;
             font-weight: bold;
             background-color: rgba(0, 0, 0, 120);
-            border: 2px solid #39FF14;
+            border: 2px solid {color_hex};
             border-radius: 8px;
             padding: 15px;
         """)
         self.label.setWordWrap(True)
         self.label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         
-        # Đưa Label vào trong ScrollArea thay vì layout thẳng
         self.scroll_area.setWidget(self.label)
         layout.addWidget(self.scroll_area)
 
         self.sizegrip = QSizeGrip(self)
         self.sizegrip.setFixedSize(10, 10) 
-        self.sizegrip.setStyleSheet("background-color: #39FF14; border-radius: 1px;") 
+        self.sizegrip.setStyleSheet(f"background-color: {color_hex}; border-radius: 1px;") 
 
         self.enable_anti_screenshot()
 
-        # 3. BIẾN CỜ KIỂM SOÁT PHÍM TẮT
         self.is_ocr_ready = False
 
-        # Khởi tạo Worker xử lý chính và truyền vai trò vào
         self.worker = AIInterviewWorker(system_role)
         self.worker.ai_response_ready.connect(self.update_text)
         
-        # Khởi chạy luồng nạp OCR ngầm
         self.init_worker = OCRInitWorker()
         self.init_worker.init_finished.connect(self.on_ocr_loaded)
         self.init_worker.start()
@@ -203,7 +229,6 @@ class InterviewOverlay(QMainWindow):
         keyboard.add_hotkey('ctrl+alt+space', self.hotkey_triggered.emit)
 
     def on_ocr_loaded(self, reader_instance):
-        # 4. KHI NẠP XONG, TRUYỀN MODEL VÀO WORKER VÀ MỞ KHÓA
         self.worker.reader = reader_instance
         self.is_ocr_ready = True
         self.label.setText("Hệ thống AI đã khởi động thành công!\nNhấn Ctrl + Alt + Space để bắt đầu quét màn hình...")
@@ -216,7 +241,7 @@ class InterviewOverlay(QMainWindow):
             try:
                 hwnd = int(self.winId())
                 ctypes.windll.user32.SetWindowDisplayAffinity(hwnd, 17)
-            except Exception as e:
+            except Exception:
                 pass
 
     def mousePressEvent(self, event):
@@ -233,7 +258,6 @@ class InterviewOverlay(QMainWindow):
         self.label.setText(text)
 
     def start_processing(self):
-        # 5. NẾU BẤM PHÍM TẮT LÚC CHƯA NẠP XONG THÌ CHẶN LẠI
         if not self.is_ocr_ready:
             self.label.setText("Hệ thống vẫn đang khởi động mô hình AI, vui lòng đợi thêm chút nữa...")
             return
@@ -248,7 +272,6 @@ class InterviewOverlay(QMainWindow):
             sys.exit(0)
 
 if __name__ == "__main__":
-    # --- HIỂN THỊ ĐÚNG ICON DƯỚI TASKBAR WINDOWS ---
     try:
         myappid = 'mizhai.interviewassistant.v1' 
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
@@ -256,36 +279,26 @@ if __name__ == "__main__":
         pass
 
     app = QApplication(sys.argv)
-    
-    # --- SET ICON CHO TOÀN BỘ APP ---
     app.setWindowIcon(QIcon("app_logo.ico"))
     
-    # --- TÍNH NĂNG HỎI VAI TRÒ TRƯỚC KHI VÀO GIAO DIỆN CHÍNH ---
     default_role = """Bạn là trợ lý phỏng vấn thông minh. Phát hiện câu hỏi phỏng vấn trong đoạn văn bản 
 quét từ màn hình dưới đây và đưa ra gợi ý trả lời cực kỳ ngắn gọn, súc tích, đi thẳng vào vấn đề.
 Không nói linh tinh giải thích để tránh sao nhãn cho người phỏng vấn. Ưu tiên nói tiếng anh trước."""
 
-    role_input, ok = QInputDialog.getText(
-        None, 
-        "Thiết lập trợ lý AI", 
-        "Bạn muốn tôi hỗ trợ bạn trong vai trò nào?\n(Nhấn Enter/OK để dùng mặc định. Nhấn Cancel để thoát.)"
-    )
+    dialog = SetupDialog(default_role)
+    if dialog.exec() == QDialog.DialogCode.Rejected:
+        sys.exit(0)
 
-    # --- SỬA LOGIC Ở ĐÂY: NẾU NHẤN CANCEL THÌ THOÁT NGAY ---
-    if not ok:
-        sys.exit(0)  
-
-    # Nếu người dùng bấm OK/Enter nhưng bỏ trống thì dùng role mặc định
-    if not role_input.strip():
+    system_role = dialog.role_input.toPlainText().strip()
+    if not system_role:
         system_role = default_role
-    else:
-        system_role = role_input.strip()
+        
+    app_color = dialog.color_hex
     
-    # --- KHỞI ĐỘNG CÁC GIAO DIỆN ---
-    credit_screen = CreditScreen()
+    credit_screen = CreditScreen(app_color)
     credit_screen.show()
     
-    overlay = InterviewOverlay(system_role)
+    overlay = InterviewOverlay(system_role, app_color)
     
     def start_main_app():
         credit_screen.close() 
