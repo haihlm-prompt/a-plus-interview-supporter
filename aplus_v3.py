@@ -4,7 +4,8 @@ import pyautogui
 import numpy as np
 import keyboard 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QPoint, QTimer
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QLabel, QSizeGrip, QInputDialog
+# Đã thêm QScrollArea vào dòng import bên dưới
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QLabel, QSizeGrip, QInputDialog, QScrollArea
 from PyQt6.QtGui import QIcon
 
 from openai import OpenAI 
@@ -29,8 +30,8 @@ class AIInterviewWorker(QThread):
 
     def __init__(self, system_role):
         super().__init__()
-        self.system_role = system_role # Nhận vai trò được cấu hình
-        self.reader = None # Sẽ được cấp phát khi OCRInitWorker chạy xong
+        self.system_role = system_role 
+        self.reader = None 
         
         self.client = OpenAI(
             api_key=ROUTER_API_KEY,
@@ -135,6 +136,33 @@ class InterviewOverlay(QMainWindow):
         layout = QVBoxLayout(control_widget)
         layout.setContentsMargins(10, 10, 10, 10)
 
+        # THÊM: Tạo QScrollArea để hỗ trợ cuộn
+        self.scroll_area = QScrollArea(self)
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setStyleSheet("""
+            QScrollArea {
+                background: transparent;
+                border: none;
+            }
+            QScrollBar:vertical {
+                border: none;
+                background: rgba(0, 0, 0, 150);
+                width: 10px;
+                border-radius: 4px;
+            }
+            QScrollBar::handle:vertical {
+                background: #39FF14;
+                border-radius: 4px;
+                min-height: 20px;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                background: none;
+            }
+        """)
+
         # 2. HIỂN THỊ THÔNG BÁO ĐANG NẠP KHI VỪA MỞ APP
         self.label = QLabel("Đang nạp mô hình AI nhận diện chữ (Khoảng 2-5 giây)...\nVui lòng chờ trong giây lát.", self)
         self.label.setStyleSheet("""
@@ -148,7 +176,10 @@ class InterviewOverlay(QMainWindow):
         """)
         self.label.setWordWrap(True)
         self.label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        layout.addWidget(self.label)
+        
+        # Đưa Label vào trong ScrollArea thay vì layout thẳng
+        self.scroll_area.setWidget(self.label)
+        layout.addWidget(self.scroll_area)
 
         self.sizegrip = QSizeGrip(self)
         self.sizegrip.setFixedSize(10, 10) 
@@ -242,7 +273,7 @@ Không nói linh tinh giải thích để tránh sao nhãn cho người phỏng 
 
     # --- SỬA LOGIC Ở ĐÂY: NẾU NHẤN CANCEL THÌ THOÁT NGAY ---
     if not ok:
-        sys.exit(0)  # Thoát chương trình nếu người dùng chọn Cancel hoặc đóng hộp thoại
+        sys.exit(0)  
 
     # Nếu người dùng bấm OK/Enter nhưng bỏ trống thì dùng role mặc định
     if not role_input.strip():
