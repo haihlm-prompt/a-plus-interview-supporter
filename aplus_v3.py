@@ -3,6 +3,7 @@ import ctypes
 import pyautogui
 import numpy as np
 import keyboard 
+import os
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QPoint, QTimer
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QWidget, 
                              QLabel, QSizeGrip, QScrollArea, QDialog, QTextEdit, 
@@ -10,6 +11,15 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QWidget,
 from PyQt6.QtGui import QIcon, QColor
 
 from openai import OpenAI 
+
+# Hàm hỗ trợ lấy đường dẫn tài nguyên khi đóng gói bằng PyInstaller
+def resource_path(relative_path):
+    """ Lấy đường dẫn tuyệt đối đến tài nguyên, hoạt động cả trên môi trường Dev và file .exe PyInstaller """
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 ROUTER_API_KEY = "sk-nry-gc2N_aerOiP1dW_sH7AxB2ynHWRAPATU7qFttTotkH8" 
 ROUTER_BASE_URL = "https://router.bynara.id/v1"  
@@ -155,7 +165,8 @@ class InterviewOverlay(QMainWindow):
         
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setWindowIcon(QIcon("app_logo.ico"))
+        # Sử dụng resource_path ở đây
+        self.setWindowIcon(QIcon(resource_path("app_logo.ico")))
 
         self.resize(700, 450) 
         self.setMinimumSize(400, 250)
@@ -169,7 +180,6 @@ class InterviewOverlay(QMainWindow):
 
         self.scroll_area = QScrollArea(self)
         self.scroll_area.setWidgetResizable(True)
-        # Đã xóa các dòng ẩn thanh cuộn ở đây
         self.scroll_area.setStyleSheet(f"""
             QScrollArea {{
                 background: transparent;
@@ -279,10 +289,12 @@ if __name__ == "__main__":
         pass
 
     app = QApplication(sys.argv)
-    app.setWindowIcon(QIcon("app_logo.ico"))
+    # Sử dụng resource_path ở đây
+    app.setWindowIcon(QIcon(resource_path("app_logo.ico")))
     
-    default_role = """ Bạn đang là một trợ lý có nhiệm vụ xem và xử lí các thông tin trên màn hình
-    và đưa ra giải pháp để trả lời chúng. """
+    default_role = """ Bạn là trợ lý phỏng vấn. Hãy đọc câu hỏi tiếng Anh trên màn hình và đưa ra câu trả lời gợi ý bằng tiếng Anh ngắn gọn để tôi đọc trong 30 giây. 
+    Văn phong tự nhiên và chuyên nghiệp. 
+    Vị trí ứng tuyển của tôi là Software Developer với 4 năm kinh nghiệm. """
 
     dialog = SetupDialog(default_role)
     if dialog.exec() == QDialog.DialogCode.Rejected:
