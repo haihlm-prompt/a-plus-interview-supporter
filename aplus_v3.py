@@ -194,7 +194,7 @@ class InterviewOverlay(QMainWindow):
             }}
         """)
 
-        self.label = QLabel("Đang nạp mô hình AI nhận diện chữ (Khoảng 2-5 giây)...\nVui lòng chờ trong giây lát.", self)
+        self.label = QLabel("Đang nạp mô hình AI nhận diện chữ (Khoảng 2-5 giây)...\nNếu lần đầu sẽ mất 3-5 phút để download model\nVui lòng chờ trong giây lát.", self)
         self.label.setStyleSheet(f"""
             color: {color_hex};
             font-size: 15px;
@@ -281,9 +281,8 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setWindowIcon(QIcon("app_logo.ico"))
     
-    default_role = """Bạn là trợ lý phỏng vấn thông minh. Phát hiện câu hỏi phỏng vấn trong đoạn văn bản 
-quét từ màn hình dưới đây và đưa ra gợi ý trả lời cực kỳ ngắn gọn, súc tích, đi thẳng vào vấn đề.
-Không nói linh tinh giải thích để tránh sao nhãn cho người phỏng vấn. Ưu tiên nói tiếng anh trước."""
+    default_role = """ Bạn đang là một trợ lý có nhiệm vụ xem và xử lí các thông tin trên màn hình
+    và đưa ra giải pháp để trả lời chúng. """
 
     dialog = SetupDialog(default_role)
     if dialog.exec() == QDialog.DialogCode.Rejected:
